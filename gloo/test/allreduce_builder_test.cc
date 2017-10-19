@@ -31,6 +31,7 @@ TYPED_TEST(AllreduceBuilderTest, Test) {
       ::gloo::AllreduceBuilder<TypeParam>::HalvingDoublingPipelined,
       ::gloo::AllreduceBuilder<TypeParam>::Ring,
       ::gloo::AllreduceBuilder<TypeParam>::RingChunked,
+      ::gloo::AllreduceBuilder<TypeParam>::Nccl2,
     };
 
   // Only test with 10 elements; this is not an algorithm implementation test

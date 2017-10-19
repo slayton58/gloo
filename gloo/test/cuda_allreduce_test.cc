@@ -13,6 +13,7 @@
 
 #include "gloo/cuda_allreduce_halving_doubling.h"
 #include "gloo/cuda_allreduce_halving_doubling_pipelined.h"
+#include "gloo/cuda_allreduce_nccl2.h"
 #include "gloo/cuda_allreduce_ring.h"
 #include "gloo/cuda_allreduce_ring_chunked.h"
 #include "gloo/test/cuda_base_test.h"
@@ -134,6 +135,25 @@ static std::function<Func16> allreduceHalvingDoublingPipelinedHP = [](
           context, ptrs, count, streams));
 };
 
+static std::function<Func> allreduceNccl2 = [](
+    std::shared_ptr<::gloo::Context>& context,
+    std::vector<float*> ptrs,
+    int count,
+    std::vector<cudaStream_t> streams) {
+  return std::unique_ptr<::gloo::Algorithm>(
+    new ::gloo::CudaAllreduceNccl2<float>(context, ptrs, count, streams));
+};
+
+static std::function<Func16> allreduceNccl2HP = [](
+    std::shared_ptr<::gloo::Context>& context,
+    std::vector<float16*> ptrs,
+    int count,
+    std::vector<cudaStream_t> streams) {
+  return std::unique_ptr<::gloo::Algorithm>(
+      new ::gloo::CudaAllreduceNccl2<float16>(
+          context, ptrs, count, streams));
+};
+
 TEST_P(CudaAllreduceTest, SinglePointer) {
   auto size = std::get<0>(GetParam());
   auto count = std::get<1>(GetParam());
@@ -196,7 +216,8 @@ TEST_F(CudaAllreduceTest, MultipleAlgorithms) {
   auto fns = {allreduceRing,
              allreduceRingChunked,
              allreduceHalvingDoubling,
-             allreduceHalvingDoublingPipelined};
+             allreduceHalvingDoublingPipelined,
+             allreduceNccl2};
 
   spawn(size, [&](std::shared_ptr<Context> context) {
     for (const auto& fn : fns) {
@@ -227,7 +248,8 @@ TEST_F(CudaAllreduceTestHP, HalfPrecisionTest) {
   auto fns = {allreduceRingHP,
              allreduceRingChunkedHP,
              allreduceHalvingDoublingHP,
-             allreduceHalvingDoublingPipelinedHP};
+             allreduceHalvingDoublingPipelinedHP,
+             allreduceNccl2HP};
   spawn(size, [&](std::shared_ptr<Context> context) {
       for (const auto& fn : fns) {
         // Run algorithm
@@ -286,6 +308,15 @@ INSTANTIATE_TEST_CASE_P(
           std::vector<int>({1, 2, 3, 4, 5, 6, 7, 8, 9, 13, 16, 24, 32})),
         ::testing::ValuesIn(std::vector<int>({1, 64, 1000})),
         ::testing::Values(allreduceHalvingDoublingPipelined)));
+
+INSTANTIATE_TEST_CASE_P(
+    AllreduceNccl2,
+    CudaAllreduceTest,
+    ::testing::Combine(
+      ::testing::Range(1, 16),
+      ::testing::ValuesIn(genMemorySizes()),
+      ::testing::Values(allreduceNccl2)));
+
 
 } // namespace
 } // namespace test

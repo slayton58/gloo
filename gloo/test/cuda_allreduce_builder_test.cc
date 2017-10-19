@@ -30,6 +30,7 @@ TYPED_TEST(CudaAllreduceBuilderTest, Test) {
       ::gloo::AllreduceBuilder<TypeParam>::HalvingDoublingPipelined,
       ::gloo::AllreduceBuilder<TypeParam>::Ring,
       ::gloo::AllreduceBuilder<TypeParam>::RingChunked,
+      ::gloo::AllreduceBuilder<TypeParam>::Nccl2,
     };
 
   // Only test with 10 elements; this is not an algorithm implementation test
@@ -70,6 +71,7 @@ TYPED_TEST(CudaAllreduceBuilderTest, TestAsync) {
       ::gloo::AllreduceBuilder<TypeParam>::HalvingDoublingPipelined,
       ::gloo::AllreduceBuilder<TypeParam>::Ring,
       ::gloo::AllreduceBuilder<TypeParam>::RingChunked,
+      ::gloo::AllreduceBuilder<TypeParam>::Nccl2,
     };
 
   // Only test with 10 elements; this is not an algorithm implementation test
