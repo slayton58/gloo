@@ -74,10 +74,10 @@ CudaAllreduceNccl2<T, W>::CudaAllreduceNccl2(
   }
   comms_.resize(localDevices);
   {
+    std::lock_guard<std::mutex> lock(CudaShared::getMutex());
     NCCL_CHECK(ncclGroupStart());
     for (int i=0; i<localDevices; i++) {
       CUDA_CHECK(cudaSetDevice(devicePtrs_[i].getDeviceID()));
-      std::lock_guard<std::mutex> lock(CudaShared::getMutex());
       NCCL_CHECK(ncclCommInitRank(&comms_[i], ncclSize, id, ncclRank + i));
     }
     NCCL_CHECK(ncclGroupEnd());
@@ -87,9 +87,9 @@ CudaAllreduceNccl2<T, W>::CudaAllreduceNccl2(
 template <typename T, typename W>
 void CudaAllreduceNccl2<T, W>::run() {
   {
+    std::lock_guard<std::mutex> lock(CudaShared::getMutex());
     NCCL_CHECK(ncclGroupStart());
     for (int i=0; i<devicePtrs_.size(); i++) {
-      std::lock_guard<std::mutex> lock(CudaShared::getMutex());
       NCCL_CHECK(ncclAllReduce(
             (const void*)(*devicePtrs_[i]), (void*)(*devicePtrs_[i]),
             count_, nccl::ncclTypeWrapper<T>::type, ncclSum, comms_[i], *streams_[i]));
