@@ -18,7 +18,7 @@
 #include "gloo/cuda.h"
 #include "gloo/cuda_private.h"
 
-#if GLOO_USE_NCCL
+#if 0 // GLOO_USE_NCCL
 #include "gloo/cuda_collectives_nccl.h"
 #else
 #include "gloo/cuda_collectives_native.h"
