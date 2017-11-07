@@ -16,7 +16,7 @@
 
 namespace gloo {
 
-template <typename T, typename W = CudaHostWorkspace<T> >
+template <typename T>
 class CudaAllreduceNccl2 : public Algorithm {
  public:
   CudaAllreduceNccl2(
@@ -30,20 +30,8 @@ class CudaAllreduceNccl2 : public Algorithm {
   virtual void run() override;
 
  protected:
-  // Both workspace types have their own initialization function.
-  template <typename U = W>
-  void init(
-      typename std::enable_if<std::is_same<U, CudaHostWorkspace<T> >::value,
-                              typename U::Pointer>::type* = 0);
-
-  template <typename U = W>
-  void init(
-      typename std::enable_if<std::is_same<U, CudaDeviceWorkspace<T> >::value,
-                              typename U::Pointer>::type* = 0);
-
   std::vector<CudaDevicePointer<T> > devicePtrs_;
   std::vector<CudaStream> streams_;
-  typename W::Pointer scratch_;
   CudaStream* scratchStream_;
 
   std::vector<ncclComm_t> comms_;
@@ -56,8 +44,6 @@ class CudaAllreduceNccl2 : public Algorithm {
   std::unique_ptr<LocalOp<T> > localReduceOp_;
   std::unique_ptr<LocalOp<T> > localBroadcastOp_;
 
-  typename W::Pointer inbox_;
-  typename W::Pointer outbox_;
   std::unique_ptr<transport::Buffer> sendDataBuf_;
   std::unique_ptr<transport::Buffer> recvDataBuf_;
 

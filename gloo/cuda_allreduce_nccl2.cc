@@ -15,8 +15,8 @@
 
 namespace gloo {
 
-template <typename T, typename W>
-CudaAllreduceNccl2<T, W>::CudaAllreduceNccl2(
+template <typename T>
+CudaAllreduceNccl2<T>::CudaAllreduceNccl2(
   const std::shared_ptr<Context>& context,
   const std::vector<T*>& ptrs,
   const int count,
@@ -84,8 +84,8 @@ CudaAllreduceNccl2<T, W>::CudaAllreduceNccl2(
   }
 }
 
-template <typename T, typename W>
-void CudaAllreduceNccl2<T, W>::run() {
+template <typename T>
+void CudaAllreduceNccl2<T>::run() {
   {
     std::lock_guard<std::mutex> lock(CudaShared::getMutex());
     NCCL_CHECK(ncclGroupStart());
@@ -101,8 +101,8 @@ void CudaAllreduceNccl2<T, W>::run() {
     CUDA_CHECK(cudaStreamSynchronize(*streams_[i]));
 }
 
-template <typename T, typename W>
-CudaAllreduceNccl2<T, W>::~CudaAllreduceNccl2() {
+template <typename T>
+CudaAllreduceNccl2<T>::~CudaAllreduceNccl2() {
   std::lock_guard<std::mutex> lock(CudaShared::getMutex());
   for (auto& comm : comms_)
     ncclCommDestroy(comm);
@@ -110,8 +110,7 @@ CudaAllreduceNccl2<T, W>::~CudaAllreduceNccl2() {
 
 // Instantiate templates
 #define INSTANTIATE_TEMPLATE(T)                                         \
-template class CudaAllreduceNccl2<T, CudaHostWorkspace<T> >;            \
-template class CudaAllreduceNccl2<T, CudaDeviceWorkspace<T> >;
+template class CudaAllreduceNccl2<T>;
 
 INSTANTIATE_TEMPLATE(int8_t);
 INSTANTIATE_TEMPLATE(int32_t);

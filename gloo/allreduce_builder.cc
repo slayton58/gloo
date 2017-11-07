@@ -152,8 +152,10 @@ std::unique_ptr<Algorithm> AllreduceBuilder<T>::getAlgorithm(
           gpuDirect_, context, inputs_, count_, streams_);
         break;
       case Nccl2:
-        return getAlgorithmCuda<CudaAllreduceNccl2, T>(
-          gpuDirect_, context, inputs_, count_, streams_);
+        //return getAlgorithmCuda<CudaAllreduceNccl2, T>(
+        //  gpuDirect_, context, inputs_, count_, streams_);
+        return std::unique_ptr<::gloo::Algorithm>(
+            new CudaAllreduceNccl2<T>(context, inputs_, count_, streams_));
         break;
       default:
         GLOO_ENFORCE(false, "Unhandled implementation: ", implementation_);
