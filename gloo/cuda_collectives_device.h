@@ -47,7 +47,7 @@ std::unique_ptr<LocalOp<T> > cudaDeviceReduce(
           count);
   }
 
-#if GLOO_USE_NCCL
+#if 0 // GLOO_USE_NCCL
   return make_unique<CudaLocalNCCLReduce<T, Dst> >(
       streams, devicePtrs, targetPtr, fn, offset, count);
 #else
@@ -76,7 +76,7 @@ std::unique_ptr<LocalOp<T> > cudaDeviceBroadcast(
           count);
   }
 
-#if GLOO_USE_NCCL
+#if 0 // GLOO_USE_NCCL
   return make_unique<CudaLocalNCCLBroadcast<T, Src> >(
       streams, devicePtrs, sourcePtr, offset, count);
 #else
