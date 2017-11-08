@@ -26,6 +26,14 @@ class NCCLCommList {
   std::vector<ncclComm_t> comms;
 };
 
+class NCCLStreamList {
+ public:
+  NCCLStreamList(const std::shared_ptr<Context>& context,
+      const std::vector<int> localDevices);
+
+  std::vector<CudaStream> streams;
+};
+
 template <typename T>
 class CudaAllreduceNccl2 : public Algorithm {
  public:
@@ -43,6 +51,7 @@ class CudaAllreduceNccl2 : public Algorithm {
   CudaStream* scratchStream_;
 
   std::shared_ptr<NCCLCommList> commList_;
+  std::shared_ptr<NCCLStreamList> streamList_;
 
   const int count_;
   const int bytes_;

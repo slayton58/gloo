@@ -100,6 +100,50 @@ NCCLCommList::~NCCLCommList() {
     ncclCommDestroy(comms[i]);
   }
 }
+namespace {
+
+static std::shared_ptr<NCCLStreamList> getCachedStreamList(
+    const std::shared_ptr<Context>& context,
+    const std::vector<int> localDevices) {
+  static thread_local std::unordered_map<std::string, std::shared_ptr<NCCLStreamList> >
+    streamLists;
+
+  // generate key
+  const int numDevices = localDevices.size();
+  std::string key = std::to_string(context->size) + ' ' +
+    std::to_string(context->rank);
+  for (auto i = 0; i < numDevices; ++i) {
+    key += ' ' + std::to_string(localDevices[i]);
+  }
+
+  // get or create CommList
+  {
+    static std::mutex m;
+    //printf("looking for commlist %s from %d\n", key.c_str(), context->rank);
+    // std::lock_guard<std::mutex> lock(m);
+    if (!streamLists[key]) {
+      streamLists[key] = std::make_shared<NCCLStreamList>(context, localDevices);
+    }
+  }
+
+  const auto streamList = streamLists[key];
+  GLOO_ENFORCE_NE(streamList.get(), (void*)nullptr);
+  return streamList;
+}
+
+}
+
+NCCLStreamList::NCCLStreamList(const std::shared_ptr<Context>& context,
+                               const std::vector<int> localDevices) {
+  const int size = localDevices.size();
+
+  streams.clear();
+
+  for (auto i=0; i<size; ++i) {
+    // CudaDeviceScope scope(localDevices[i]);
+    streams.push_back(CudaStream(localDevices[i]));
+  }
+}
 
 template <typename T>
 CudaAllreduceNccl2<T>::CudaAllreduceNccl2(
@@ -120,13 +164,16 @@ CudaAllreduceNccl2<T>::CudaAllreduceNccl2(
 
   for (auto i = 0; i < ptrs.size(); i++) {
     auto ptr = CudaDevicePointer<T>::create(ptrs[i], count_);
+#if 0
     if (newStream) {
       streams_.push_back(CudaStream(ptr.getDeviceID()));
     } else {
       streams_.push_back(CudaStream(ptr.getDeviceID(), streams[i]));
     }
+#endif
     devicePtrs_.push_back(std::move(ptr));
   }
+
 
 #if 0
   // Generate unique ID on root node
@@ -176,6 +223,7 @@ CudaAllreduceNccl2<T>::CudaAllreduceNccl2(
 		localDevices[i] = devicePtrs_[i].getDeviceID();
 	}
 	commList_ = getCachedCommList(context, localDevices);
+  streamList_ = getCachedStreamList(context, localDevices);
 #endif
 }
 
@@ -188,14 +236,15 @@ void CudaAllreduceNccl2<T>::run() {
     for (int i=0; i<devicePtrs_.size(); i++) {
       NCCL_CHECK(ncclAllReduce(
             (const void*)(*devicePtrs_[i]), (void*)(*devicePtrs_[i]),
-            count_, nccl::ncclTypeWrapper<T>::type, ncclSum, commList_->comms[i], *streams_[i]));
+            count_, nccl::ncclTypeWrapper<T>::type, ncclSum, commList_->comms[i],
+            *streamList_->streams[i]));
     }
     NCCL_CHECK(ncclGroupEnd());
     //printf("rankall done\n");
   }
 
   for (int i=0; i<devicePtrs_.size(); i++)
-    CUDA_CHECK(cudaStreamSynchronize(*streams_[i]));
+    CUDA_CHECK(cudaStreamSynchronize(*streamList_->streams[i]));
 }
 
 #if 0
