@@ -12,8 +12,94 @@
 #include "gloo/broadcast_one_to_all.h"
 #include "gloo/cuda_private.h"
 
+#include <unordered_map>
 
 namespace gloo {
+
+namespace {
+
+// Creating NCCL communicators is expensive. So we cache and reuse them.
+static std::shared_ptr<NCCLCommList> getCachedCommList(
+    const std::shared_ptr<Context>& context,
+    const std::vector<int> localDevices)
+{
+  static thread_local std::unordered_map<std::string, std::shared_ptr<NCCLCommList> >
+    commLists;
+
+  // generate key
+  const int numDevices = localDevices.size();
+  std::string key = std::to_string(context->size) + ' ' +
+    std::to_string(context->rank);
+  for (auto i = 0; i < numDevices; ++i) {
+    key += ' ' + std::to_string(localDevices[i]);
+  }
+
+  // get or create CommList
+  {
+    static std::mutex m;
+    //printf("looking for commlist %s from %d\n", key.c_str(), context->rank);
+    // std::lock_guard<std::mutex> lock(m);
+    if (!commLists[key]) {
+      commLists[key] = std::make_shared<NCCLCommList>(context, localDevices);
+    }
+  }
+
+  const auto commList = commLists[key];
+  GLOO_ENFORCE_NE(commList.get(), (void*)nullptr);
+  return commList;
+}
+
+} // namespace
+
+NCCLCommList::NCCLCommList(const std::shared_ptr<Context>& context,
+    const std::vector<int> localDevices) {
+  // generate unique ID on root node
+  ncclUniqueId *id = new ncclUniqueId;
+  std::vector<char*> ids;
+  ids.push_back(id->internal);
+  if (context->rank == 0) {
+    // std::lock_guard<std::mutex> lock(CudaShared::getMutex());
+    //printf("getting NCCL unique ID from rank %d\n", context->rank);
+    NCCL_CHECK(ncclGetUniqueId(id));
+    //printf("generated id: %s\n", id->internal);
+  }
+
+  //printf("(%d) current id is %s\n", context->rank, (char *)id->internal);
+
+  // broadcast ID to other nodes
+  //printf("bcasting id to all other ranks (%d)\n", context->rank);
+  BroadcastOneToAll<char>(context, ids, NCCL_UNIQUE_ID_BYTES).run();
+
+  //printf("(%d) current id is now %s\n", context->rank, id->internal);
+  // create comms
+  // FIXME currently, we assume all ranks use the same number of devices
+  const int numDevices = localDevices.size();
+	// num_ranks * num_devices_per_rank
+  const int ncclSize = context->size * numDevices;
+  // rank_id * num_devices_per_rank
+  const int ncclRankStart = context->rank * numDevices;
+
+  //printf("rank %d initializing %d ranks of %d total from %d with id: %p\n", context->rank, numDevices, ncclSize, ncclRankStart, id->internal);
+  comms.reserve(numDevices);
+  {
+    // std::lock_guard<std::mutex> lock(CudaShared::getMutex());
+    NCCL_CHECK(ncclGroupStart());
+    for (auto i = 0; i < numDevices; ++i) {
+      CudaDeviceScope scope(localDevices[i]);
+      NCCL_CHECK(ncclCommInitRank(&comms[i], ncclSize, *id,
+                 ncclRankStart + i));
+    }
+    NCCL_CHECK(ncclGroupEnd());
+  }
+  //printf("rank %d all done\n", context->rank);
+}
+
+NCCLCommList::~NCCLCommList() {
+  for (auto i = 0; i < comms.size(); ++i) {
+    std::lock_guard<std::mutex> lock(CudaShared::getMutex());
+    ncclCommDestroy(comms[i]);
+  }
+}
 
 template <typename T>
 CudaAllreduceNccl2<T>::CudaAllreduceNccl2(
@@ -42,6 +128,7 @@ CudaAllreduceNccl2<T>::CudaAllreduceNccl2(
     devicePtrs_.push_back(std::move(ptr));
   }
 
+#if 0
   // Generate unique ID on root node
   ncclUniqueId id;
   std::vector<int8_t*> ids;
@@ -82,31 +169,43 @@ CudaAllreduceNccl2<T>::CudaAllreduceNccl2(
     }
     NCCL_CHECK(ncclGroupEnd());
   }
+#else
+	// assemble list of local devices
+  std::vector<int> localDevices(ptrs.size());
+  for (auto i=0; i < devicePtrs_.size(); ++i) {
+		localDevices[i] = devicePtrs_[i].getDeviceID();
+	}
+	commList_ = getCachedCommList(context, localDevices);
+#endif
 }
 
 template <typename T>
 void CudaAllreduceNccl2<T>::run() {
   {
+    //printf("running allreduce on rank\n");
     std::lock_guard<std::mutex> lock(CudaShared::getMutex());
     NCCL_CHECK(ncclGroupStart());
     for (int i=0; i<devicePtrs_.size(); i++) {
       NCCL_CHECK(ncclAllReduce(
             (const void*)(*devicePtrs_[i]), (void*)(*devicePtrs_[i]),
-            count_, nccl::ncclTypeWrapper<T>::type, ncclSum, comms_[i], *streams_[i]));
+            count_, nccl::ncclTypeWrapper<T>::type, ncclSum, commList_->comms[i], *streams_[i]));
     }
     NCCL_CHECK(ncclGroupEnd());
+    //printf("rankall done\n");
   }
 
   for (int i=0; i<devicePtrs_.size(); i++)
     CUDA_CHECK(cudaStreamSynchronize(*streams_[i]));
 }
 
+#if 0
 template <typename T>
 CudaAllreduceNccl2<T>::~CudaAllreduceNccl2() {
   std::lock_guard<std::mutex> lock(CudaShared::getMutex());
   for (auto& comm : comms_)
     ncclCommDestroy(comm);
 }
+#endif
 
 // Instantiate templates
 #define INSTANTIATE_TEMPLATE(T)                                         \

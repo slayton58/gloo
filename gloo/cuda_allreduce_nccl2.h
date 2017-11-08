@@ -14,7 +14,17 @@
 #include "gloo/cuda_workspace.h"
 #include "gloo/nccl/nccl.h"
 
+#include <unordered_map>
+
 namespace gloo {
+
+class NCCLCommList {
+ public:
+  NCCLCommList(const std::shared_ptr<Context>& context,
+      const std::vector<int> localDevices);
+  ~NCCLCommList();
+  std::vector<ncclComm_t> comms;
+};
 
 template <typename T>
 class CudaAllreduceNccl2 : public Algorithm {
@@ -25,8 +35,6 @@ class CudaAllreduceNccl2 : public Algorithm {
       const int count,
       const std::vector<cudaStream_t>& streams = std::vector<cudaStream_t>());
 
-  virtual ~CudaAllreduceNccl2();
-
   virtual void run() override;
 
  protected:
@@ -34,7 +42,7 @@ class CudaAllreduceNccl2 : public Algorithm {
   std::vector<CudaStream> streams_;
   CudaStream* scratchStream_;
 
-  std::vector<ncclComm_t> comms_;
+  std::shared_ptr<NCCLCommList> commList_;
 
   const int count_;
   const int bytes_;
